@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Space RNG Clicker</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: black;
+      color: white;
+      text-align: center;
+      overflow-y: auto;
+    }
+    /* Canvas sits behind everything */
+    canvas#stars {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: -2;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: url('https://cdn.pixabay.com/photo/2011/12/14/12/11/space-11099_1280.jpg') no-repeat center center;
+      background-size: cover;
+      opacity: 0.18;
+      z-index: -1;
+      mix-blend-mode: screen;
+    }
+    h1 { font-size: 2.5em; margin: 1rem 0; text-shadow: 0 0 10px white; }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 1em;
+      background: #222;
+      color: white;
+      border: 1px solid #555;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: #444; }
+    .tab-buttons { margin-bottom: 10px; }
+    .section {
+      margin: 1rem auto;
+      padding: 1rem;
+      background: rgba(0,0,0,0.6);
+      max-width: 900px;
+      border-radius: 10px;
+    }
+    .hidden { display: none; }
+    .item {
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid #666;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .item button { font-size: 0.8em; padding: 4px 10px; margin-left: 10px; background: #333; border: 1px solid #777; border-radius: 5px; cursor: pointer; }
+    .item button:hover { background: #555; }
+
+    .common { color: #aaa; }
+    .uncommon { color: #4caf50; }
+    .rare { color: #2196f3; }
+    .epic { color: #b26ae6; }
+    .legendary { color: #f44336; font-weight: bold; text-shadow: 0 0 5px #f44336aa; }
+    .exotic {
+      background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      font-weight: bold; text-shadow: 0 0 3px white;
+    }
+
+    .collection-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .collection-item {
+      background: rgba(255,255,255,0.03);
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+    .collection-locked {
+      background: black !important;
+      color: black !important;
+      position: relative;
+    }
+    .collection-locked::after {
+      content: '???';
+      position: absolute;
+      color: white;
+      font-weight: 900;
+      font-size: 1.1em;
+    }
+
+    /* Blender */
+    #blenderInventory { max-height: 200px; overflow-y: auto; text-align: left; margin-bottom: 1rem; border: 1px solid #555; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; }
+    .blend-item { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-bottom:1px solid #444; cursor:pointer; }
+    .blend-item.selected { background-color: rgba(76,175,80,0.25); }
+    #blendBtn { font-size:1.1em; padding:10px 25px; background:#2979ff; border:none; border-radius:8px; cursor:pointer; color:white; font-weight:bold; }
+    #blendBtn:disabled { background:#555; cursor:not-allowed; }
+    #blendAnimation { margin-top:15px; height:60px; font-size:1.2em; font-weight:bold; color:#00ffcc; letter-spacing:2px; min-height:60px; }
+
+    /* Recipe list */
+    .recipe { margin: 8px 0; padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.02); display:flex; justify-content:space-between; align-items:center; border: 1px solid #444; }
+    .recipe .reqs { text-align:left; font-size:0.95em; }
+
+    /* Required ingredient slot */
+    .req-slot { display:flex; align-items:center; justify-content:space-between; padding:6px; border-radius:6px; margin:4px 0; border: 2px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.15); }
+    .req-available { border-color: rgba(255,255,255,0.18); box-shadow: 0 0 8px rgba(255,255,255,0.03); cursor: pointer; }
+    .req-missing { border-color: rgba(0,0,0,0.6); opacity: 0.6; cursor: not-allowed; }
+    .req-filled { background: rgba(76,175,80,0.15); border-color: rgba(76,175,80,0.6); }
+
+    /* settings layout */
+    .settings-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:8px 0; }
+    .settings-row label { flex: 1 0 200px; text-align:left; }
+    .settings-controls { flex: 1 1 300px; text-align:left; }
+
+    /* small responsivity */
+    @media (max-width: 600px) {
+      .collection-board { grid-template-columns: repeat(2, 1fr); }
+      .settings-row { flex-direction: column; align-items:stretch; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stars"></canvas>
+  <h1>🌌 Space RNG Clicker</h1>
+  <p><strong>Wallet:</strong> <span id="wallet">0</span> coins</p>
+  <p><strong>Luck Multiplier:</strong> x<span id="luckDisplay">1</span></p>
+
+  <div class="tab-buttons">
+    <button onclick="roll()">🎲 Roll</button>
+    <button onclick="toggleTab('inventory')">🎒 Inventory</button>
+    <button onclick="toggleTab('shop')">🛒 Shop</button>
+    <button onclick="toggleTab('collection')">📚 Collection</button>
+    <button onclick="toggleTab('blender')">⚗️ Blender</button>
+    <button onclick="toggleTab('settings')">⚙️ Settings</button>
+  </div>
+
+  <div class="section" id="resultArea">
+    <h2 id="result">Roll to discover a space item!</h2>
+    <p id="rarityText"></p>
+    <p id="activePotionInfo"></p>
+  </div>
+
+  <div class="section hidden" id="inventory">
+    <h2>Inventory</h2>
+    <div id="inventoryItems"></div>
+    <button onclick="sellAll()">Auto Sell (Excludes Favorites)</button>
+  </div>
+
+  <div class="section hidden" id="shop">
+    <h2>Shop - Luck Boosters</h2>
+    <div id="shopItems"></div>
+  </div>
+
+  <div class="section hidden" id="collection">
+    <h2>Collection</h2>
+    <div id="collectionBoard" class="collection-board"></div>
+  </div>
+
+  <div class="section hidden" id="blender">
+    <h2>⚗️ Blender</h2>
+
+    <!-- Mode selector: Free Blend vs Recipes -->
+    <div style="margin-bottom:8px;">
+      <label style="margin-right:12px;">
+        <input type="radio" name="blendMode" value="free" checked onchange="renderBlenderInventory()"> Free Blend (select 3)
+      </label>
+      <label>
+        <input type="radio" name="blendMode" value="recipes" onchange="renderBlenderInventory()"> Recipes (craft from required items)
+      </label>
+    </div>
+
+    <!-- Free blend inventory -->
+    <div id="blenderFreeArea">
+      <p>Select exactly 3 items from your inventory to blend into a new item (random result).</p>
+      <div id="blenderInventory"></div>
+      <button id="blendBtn" disabled onclick="blendItems()">Blend Items</button>
+      <div id="blendAnimation"></div>
+    </div>
+
+    <!-- Recipe crafting area -->
+    <div id="blenderRecipeArea" class="hidden">
+      <p>Craft items from recipes. Click each required slot to add the needed ingredient (one at a time). Filled slots show green.</p>
+      <div id="recipesList"></div>
+    </div>
+  </div>
+
+  <div class="section hidden" id="settings">
+    <h2>Settings</h2>
+
+    <div class="settings-row">
+      <label for="musicSelect">Background Track</label>
+      <div class="settings-controls">
+        <select id="musicSelect">
+          <option value="song1.mp3">Track 1 (song1.mp3)</option>
+          <option value="song2.mp3">Track 2 (song2.mp3)</option>
+          <option value="song3.mp3">Track 3 (song3.mp3)</option>
+        </select>
+        <button id="playPauseMusic">Play</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label for="volumeRange">Master Volume</label>
+      <div class="settings-controls">
+        <input type="range" id="volumeRange" min="0" max="1" step="0.01">
+        <span id="volumeLabel">100%</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label>Save / Load</label>
+      <div class="settings-controls">
+        <button onclick="saveGame(true)">Save Now</button>
+        <button onclick="loadGame(true)">Load Game</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label>Reset</label>
+      <div class="settings-controls">
+        <button onclick="confirmReset()">Reset All (clear save)</button>
+      </div>
+    </div>
+
+    <p style="margin-top: 8px; font-size: 0.9em; opacity: 0.9;">
+      Note: Music filenames are placeholders — replace them with your own audio files in the same folder, or change the selector values.
+    </p>
+  </div>
+
+  <!-- background audio element (we control it from JS) -->
+  <audio id="bgAudio" loop></audio>
+
+<script>
+/* --- Game state --- */
+let wallet = 0;
+let baseLuckMultiplier = 1;     // base luck from shop purchases, persistent
+let luckMultiplier = 1;         // current effective luck (base * active potion)
+let inventory = [];             // each item: { text, rarity, value, effect, favorite, ... }
+let collectionSet = new Set();  // unlocked item texts
+let rollCooldown = false;
+const shopPurchasedSet = new Set(); // track one-time purchases
+
+let activePotion = null; // { text, luckMultiplier, chargesRemaining }
+
+/* --- Shop items (multiplies base luck) --- */
+const shopItems = [
+  { name: "Nova Magnet", cost: 1000, multiplier: 2 },
+  { name: "Comet Lens", cost: 5000, multiplier: 4 },
+  { name: "Quantum Scope", cost: 10000, multiplier: 8 },
+  { name: "Dark Matter Coil", cost: 25000, multiplier: 15 },
+  { name: "Wormhole Stabilizer", cost: 50000, multiplier: 30 },
+  { name: "Celestial Amplifier", cost: 100000, multiplier: 50 }
+];
+
+/* --- Outcomes --- */
+/* Note: Astral Radiance is craftOnly and will not appear from random rolls */
+const outcomes = [
+  // COMMON (15)
+  { text: "💫 Star Fragment", weight: 40, rarity: "common", value: 10 },
+  { text: "🪐 Asteroid Rock", weight: 45, rarity: "common", value: 9 },
+  { text: "🛸 Alien Artifact", weight: 48, rarity: "common", value: 8 },
+  { text: "🚀 Space Dust", weight: 50, rarity: "common", value: 6 },
+  { text: "🪐 Space Crystal", weight: 50, rarity: "common", value: 6 },
+  { text: "🌙 Lunar Rock", weight: 55, rarity: "common", value: 5 },
+  { text: "🧪 Alien Slime", weight: 40, rarity: "common", value: 8 },
+  { text: "📡 Broken Antenna", weight: 35, rarity: "common", value: 7 },
+  { text: "🛰️ Satellite Chip", weight: 38, rarity: "common", value: 6 },
+  { text: "⚙️ Rusted Gear", weight: 42, rarity: "common", value: 5 },
+  { text: "🌠 Comet Dust", weight: 39, rarity: "common", value: 7 },
+  { text: "🛸 Scrap Metal", weight: 37, rarity: "common", value: 6 },
+  { text: "🪐 Moon Pebble", weight: 43, rarity: "common", value: 4 },
+  { text: "🌌 Nebula Ash", weight: 41, rarity: "common", value: 5 },
+  { text: "🧬 Alien DNA", weight: 44, rarity: "common", value: 5 },
+
+  // UNCOMMON (13)
+  { text: "🌟 Pulsar Fragment", weight: 30, rarity: "uncommon", value: 50 },
+  { text: "🪐 Solar Flare Residue", weight: 28, rarity: "uncommon", value: 45 },
+  { text: "🛰️ Quantum Circuit", weight: 27, rarity: "uncommon", value: 40 },
+  { text: "🔋 Plasma Cell", weight: 26, rarity: "uncommon", value: 38 },
+  { text: "🚀 Rocket Fuel", weight: 25, rarity: "uncommon", value: 35 },
+  { text: "🛸 Alien Crystal", weight: 29, rarity: "uncommon", value: 42 },
+  { text: "🧪 Nano Serum", weight: 31, rarity: "uncommon", value: 44 },
+  { text: "🛰️ Microchip", weight: 24, rarity: "uncommon", value: 37 },
+  { text: "🌕 Moonstone", weight: 23, rarity: "uncommon", value: 36 },
+  { text: "⚛️ Antimatter Sample", weight: 21, rarity: "uncommon", value: 33 },
+  { text: "🔮 Energy Sphere", weight: 22, rarity: "uncommon", value: 34 },
+  { text: "🪐 Gas Cloud", weight: 20, rarity: "uncommon", value: 31 },
+  { text: "📡 Signal Booster", weight: 19, rarity: "uncommon", value: 30 },
+
+  // RARE (12)
+  { text: "🌌 Dark Matter Shard", weight: 15, rarity: "rare", value: 100 },
+  { text: "🌟 Pulsar Core", weight: 14, rarity: "rare", value: 95 },
+  { text: "🛸 Alien Technology", weight: 13, rarity: "rare", value: 90 },
+  { text: "🔮 Quantum Crystal", weight: 12, rarity: "rare", value: 88 },
+  { text: "🚀 Starship Engine", weight: 11, rarity: "rare", value: 85 },
+  { text: "🛰️ AI Core", weight: 10, rarity: "rare", value: 82 },
+  { text: "🧪 Super Serum", weight: 9, rarity: "rare", value: 80 },
+  { text: "🌕 Moon Core", weight: 8, rarity: "rare", value: 75 },
+  { text: "⚛️ Antimatter Container", weight: 7, rarity: "rare", value: 70 },
+  { text: "🔋 Energy Matrix", weight: 6, rarity: "rare", value: 68 },
+  { text: "🪐 Gravity Well", weight: 5, rarity: "rare", value: 65 },
+  { text: "🛰️ Satellite Network", weight: 4, rarity: "rare", value: 62 },
+
+  // EPIC (10)
+  { text: "🌠 Star Forge", weight: 2, rarity: "epic", value: 250 },
+  { text: "🛸 Alien Core", weight: 3, rarity: "epic", value: 240 },
+  { text: "🚀 Warp Drive", weight: 1, rarity: "epic", value: 230 },
+  { text: "🔮 Cosmic Crystal", weight: 2, rarity: "epic", value: 225 },
+  { text: "🛰️ Galactic AI", weight: 3, rarity: "epic", value: 220 },
+  { text: "🌌 Black Hole Sample", weight: 1, rarity: "epic", value: 215 },
+  { text: "🧪 Universal Serum", weight: 2, rarity: "epic", value: 210 },
+  { text: "🌕 Lunar Beacon", weight: 3, rarity: "epic", value: 205 },
+  { text: "⚛️ Antimatter Reactor", weight: 1, rarity: "epic", value: 200 },
+  { text: "🔋 Stellar Battery", weight: 2, rarity: "epic", value: 198 },
+
+  // LEGENDARY (5)
+  // Mark Astral Radiance as craftOnly so it will not be rolled randomly
+  { text: "🌟 Astral Radiance Potion", weight: 1, rarity: "legendary", value: 500, effect: "boostLuck", craftOnly: true },
+  { text: "🛸 Alien Relic", weight: 1, rarity: "legendary", value: 480 },
+  { text: "🚀 Cosmic Engine", weight: 1, rarity: "legendary", value: 470 },
+  { text: "🔮 Dimensional Crystal", weight: 1, rarity: "legendary", value: 460 },
+  { text: "🌌 Eternal Star", weight: 1, rarity: "legendary", value: 450 },
+
+  // EXOTIC (3)
+  { text: "🌈 Prism Core", weight: 1, rarity: "exotic", value: 1000 },
+  { text: "🛸 Void Essence", weight: 1, rarity: "exotic", value: 950 },
+  { text: "🚀 Infinity Drive", weight: 1, rarity: "exotic", value: 900 },
+];
+
+/* --- Utility maps --- */
+const rarityOrder = ["common","uncommon","rare","epic","legendary","exotic"];
+const rarityClasses = {
+  common: "common", uncommon: "uncommon", rare: "rare", epic: "epic", legendary: "legendary", exotic: "exotic"
+};
+
+/* --- UI helpers --- */
+function updateWallet() { document.getElementById("wallet").textContent = wallet.toFixed(0); }
+function updateLuckDisplay() { document.getElementById("luckDisplay").textContent = luckMultiplier.toFixed(2); }
+function updateActivePotionInfo() {
+  const el = document.getElementById("activePotionInfo");
+  if (activePotion) {
+    el.textContent = `Active Potion: ${activePotion.text} — Charges: ${activePotion.chargesRemaining}, Luck x${activePotion.luckMultiplier} (applied to rolls)`;
+  } else {
+    el.textContent = "";
+  }
+}
+
+/* --- Tab switching --- */
+function toggleTab(tabName) {
+  const tabs = ["inventory","shop","collection","blender","settings"];
+  tabs.forEach(t => document.getElementById(t).classList.add("hidden"));
+  if (tabName) document.getElementById(tabName).classList.remove("hidden");
+  if (tabName === "inventory") renderInventory();
+  else if (tabName === "shop") renderShop();
+  else if (tabName === "collection") renderCollection();
+  else if (tabName === "blender") renderBlenderInventory();
+  // settings will always reflect current settings
+}
+
+/* --- Drop logic (luck affects rarity weights) --- */
+const baseRarityWeights = {
+  common: 50,
+  uncommon: 30,
+  rare: 15,
+  epic: 7,
+  legendary: 3,
+  exotic: 1
+};
+
+function getAdjustedRarityWeights(effectiveLuck) {
+  // effectiveLuck is the total multiplier (baseLuck * potionLuck if active)
+  const rarityLuckFactor = {
+    common: -0.4,
+    uncommon: -0.1,
+    rare: 0.3,
+    epic: 0.8,
+    legendary: 1.6,
+    exotic: 3.0
+  };
+  const adjusted = {};
+  for (const r of Object.keys(baseRarityWeights)) {
+    const factor = rarityLuckFactor[r] || 0;
+    const newW = baseRarityWeights[r] * (1 + factor * (effectiveLuck - 1));
+    adjusted[r] = Math.max(0.01, newW);
+  }
+  return adjusted;
+}
+
+function getRandomOutcome() {
+  // compute effective luck used for random generation
+  const effectiveLuck = baseLuckMultiplier * (activePotion ? activePotion.luckMultiplier : 1);
+  const adj = getAdjustedRarityWeights(effectiveLuck);
+  let totalRarityWeight = 0;
+  for (const r of rarityOrder) totalRarityWeight += adj[r] || 0;
+  let pick = Math.random() * totalRarityWeight;
+  let chosenRarity = rarityOrder[0];
+  for (const r of rarityOrder) {
+    if (pick < (adj[r] || 0)) { chosenRarity = r; break; }
+    pick -= (adj[r] || 0);
+  }
+
+  // Filter outcomes to chosenRarity and exclude craftOnly items
+  const filtered = outcomes.filter(o => o.rarity === chosenRarity && !o.craftOnly);
+  let totalWeight = filtered.reduce((s,o) => s + (o.weight || 0), 0);
+  if (totalWeight <= 0) {
+    // fallback: pick any non-craftOnly item
+    const fallback = outcomes.filter(o => !o.craftOnly);
+    return fallback[Math.floor(Math.random() * fallback.length)] || outcomes[0];
+  }
+  let wpick = Math.random() * totalWeight;
+  for (const o of filtered) {
+    if (wpick < o.weight) return o;
+    wpick -= o.weight;
+  }
+  return filtered[filtered.length - 1] || outcomes[0];
+}
+
+/* --- Roll --- */
+function roll() {
+  if (rollCooldown) return;
+  rollCooldown = true;
+  setTimeout(() => rollCooldown = false, 700);
+
+  const result = getRandomOutcome();
+
+  // Add to inventory (no coins directly from roll)
+  inventory.push({
+    text: result.text,
+    rarity: result.rarity,
+    value: result.value,
+    effect: result.effect || null,
+    favorite: false
+  });
+
+  // Add to collection if new
+  if (!collectionSet.has(result.text)) collectionSet.add(result.text);
+
+  // If an active potion is present, consume 1 charge on every roll
+  if (activePotion) {
+    activePotion.chargesRemaining = Math.max(0, activePotion.chargesRemaining - 1);
+    if (activePotion.chargesRemaining <= 0) {
+      activePotion = null;
+      alert("Your potion has run out of charges.");
+    }
+    luckMultiplier = baseLuckMultiplier * (activePotion ? activePotion.luckMultiplier : 1);
+  } else {
+    luckMultiplier = baseLuckMultiplier;
+  }
+
+  updateActivePotionInfo();
+  updateLuckDisplay();
+  renderInventory();
+  renderCollection();
+
+  // Show result
+  const resultElem = document.getElementById("result");
+  const rarityText = document.getElementById("rarityText");
+  resultElem.textContent = `You rolled: ${result.text}`;
+  rarityText.textContent = `Rarity: ${result.rarity.toUpperCase()}`;
+  rarityText.className = rarityClasses[result.rarity] || "";
+}
+
+/* --- Inventory rendering & sell logic --- */
+function renderInventory() {
+  const container = document.getElementById("inventoryItems");
+  container.innerHTML = "";
+  if (inventory.length === 0) {
+    container.textContent = "Inventory is empty.";
+    return;
+  }
+
+  inventory.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = `item ${rarityClasses[item.rarity] || ""}`;
+    const left = document.createElement("div");
+    // display charges/luck for potions
+    let displayText = `${item.text} (Value: ${item.value})`;
+    if (item.effect === "potion") {
+      displayText += ` — Charges: ${item.charges || 0}, Luck x${item.luckMultiplier || 1}`;
+    }
+    left.textContent = displayText;
+    if (item.favorite) left.style.borderColor = "#ffd700";
+
+    const controls = document.createElement("div");
+
+    const favBtn = document.createElement("button");
+    favBtn.textContent = item.favorite ? "★" : "☆";
+    favBtn.title = "Toggle Favorite";
+    favBtn.onclick = (e) => {
+      e.stopPropagation();
+      item.favorite = !item.favorite;
+      renderInventory();
+    };
+
+    const sellBtn = document.createElement("button");
+    sellBtn.textContent = "Sell";
+    sellBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (item.favorite) {
+        alert("Cannot sell a favorite item!");
+        return;
+      }
+      wallet += item.value;
+      inventory.splice(idx, 1);
+      updateWallet();
+      renderInventory();
+      renderBlenderInventory();
+    };
+
+    controls.appendChild(favBtn);
+    controls.appendChild(sellBtn);
+
+    // If this is a crafted consumable potion, show Use button
+    if (item.effect === "potion" && item.charges && item.luckMultiplier) {
+      const useBtn = document.createElement("button");
+      useBtn.textContent = "Use";
+      useBtn.title = "Use potion (activates its luck for subsequent rolls until charges run out)";
+      useBtn.onclick = (e) => {
+        e.stopPropagation();
+        activePotion = {
+          text: item.text,
+          luckMultiplier: item.luckMultiplier,
+          chargesRemaining: item.charges
+        };
+        // Remove used potion item from inventory (single-use stack)
+        inventory.splice(idx, 1);
+        luckMultiplier = baseLuckMultiplier * activePotion.luckMultiplier;
+        updateActivePotionInfo();
+        updateLuckDisplay();
+        renderInventory();
+        renderBlenderInventory();
+        alert(`${activePotion.text} activated: Luck x${activePotion.luckMultiplier} for ${activePotion.chargesRemaining} rolls.`);
+      };
+      controls.appendChild(useBtn);
+    }
+
+    div.appendChild(left);
+    div.appendChild(controls);
+    container.appendChild(div);
+  });
+}
+
+function sellAll() {
+  let total = 0;
+  for (let i = inventory.length - 1; i >= 0; i--) {
+    if (!inventory[i].favorite) {
+      total += inventory[i].value;
+      inventory.splice(i, 1);
+    }
+  }
+  wallet += total;
+  updateWallet();
+  renderInventory();
+  renderBlenderInventory();
+}
+
+/* --- Shop rendering & buy-once logic --- */
+function renderShop() {
+  const container = document.getElementById("shopItems");
+  container.innerHTML = "";
+  shopItems.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.textContent = `${item.name} - Cost: ${item.cost} coins (x${item.multiplier} base Luck)`;
+
+    const buyBtn = document.createElement("button");
+    if (shopPurchasedSet.has(item.name)) {
+      buyBtn.textContent = "Purchased";
+      buyBtn.disabled = true;
+    } else {
+      buyBtn.textContent = "Buy";
+      buyBtn.onclick = () => {
+        if (wallet >= item.cost) {
+          wallet -= item.cost;
+          baseLuckMultiplier *= item.multiplier; // multiply base luck
+          shopPurchasedSet.add(item.name);
+          updateWallet();
+          // update effective luck display (if potion active it multiplies further)
+          luckMultiplier = baseLuckMultiplier * (activePotion ? activePotion.luckMultiplier : 1);
+          updateLuckDisplay();
+          renderShop();
+          alert(`Purchased ${item.name}! Base luck multiplier increased to x${baseLuckMultiplier.toFixed(2)}.`);
+        } else {
+          alert("Not enough coins.");
+        }
+      };
+    }
+
+    div.appendChild(buyBtn);
+    container.appendChild(div);
+  });
+}
+
+/* --- Collection rendering: show all items, locked ones black '???' --- */
+function renderCollection() {
+  const container = document.getElementById("collectionBoard");
+  container.innerHTML = "";
+
+  // sort outcomes by rarity order then text
+  const sorted = outcomes.slice().sort((a,b) => {
+    if (rarityOrder.indexOf(a.rarity) !== rarityOrder.indexOf(b.rarity)) {
+      return rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity);
+    }
+    return a.text.localeCompare(b.text);
+  });
+
+  sorted.forEach(o => {
+    const div = document.createElement("div");
+    const unlocked = collectionSet.has(o.text);
+    if (unlocked) {
+      div.className = `collection-item ${rarityClasses[o.rarity] || ""}`;
+      div.textContent = o.text;
+    } else {
+      div.className = `collection-item collection-locked`;
+      div.textContent = "";
+    }
+    container.appendChild(div);
+  });
+}
+
+/* --- Starfield + Background visuals --- */
+const canvas = document.getElementById("stars");
+const ctx = canvas.getContext("2d");
+let stars = [];
+const starCount = 240;
+
+let planets = [];
+let nebulas = [];
+let blackHoles = [];
+
+/* planet / nebula / black hole config */
+function initBackgroundObjects() {
+  planets = [];
+  nebulas = [];
+  blackHoles = [];
+
+  // Planets: mix of small and larger planets with slow orbit/drift
+  const planetCount = 6;
+  for (let i = 0; i < planetCount; i++) {
+    planets.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      radius: 24 + Math.random() * 60,
+      speedX: -0.02 - Math.random() * 0.06, // slow left drift
+      speedY: (Math.random()-0.5) * 0.02,
+      hue: Math.floor(Math.random() * 360),
+      rotation: Math.random() * Math.PI*2,
+      rotSpeed: (Math.random()-0.5) * 0.002,
+      glow: 0.08 + Math.random() * 0.2,
+      parallax: 0.15 + Math.random() * 0.5
+    });
+  }
+
+  // Nebulas: semi-transparent radial blobs
+  const nebCount = 3;
+  for (let i = 0; i < nebCount; i++) {
+    nebulas.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      radius: 160 + Math.random() * 360,
+      hue: Math.floor(Math.random() * 360),
+      alpha: 0.06 + Math.random() * 0.14,
+      driftX: (Math.random()-0.5) * 0.05,
+      driftY: (Math.random()-0.5) * 0.03,
+      rot: Math.random() * Math.PI*2,
+      rotSpeed: (Math.random()-0.5) * 0.0006
+    });
+  }
+
+  // Black holes: 1 or 2 dramatic swirls
+  const bhCount = 1 + Math.floor(Math.random()*2);
+  for (let i = 0; i < bhCount; i++) {
+    blackHoles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      radius: 40 + Math.random() * 70,
+      spin: 0,
+      spinSpeed: -0.008 + Math.random()*0.016,
+      glare: 0.2 + Math.random()*0.6
+    });
+  }
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+function initStars() {
+  stars = [];
+  for (let i = 0; i < starCount; i++) {
+    stars.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      size: Math.random() * 1.6,
+      speed: 0.1 + Math.random() * 0.9,
+      opacity: 0.25 + Math.random() * 0.75
+    });
+  }
+}
+
+function drawNebulas() {
+  nebulas.forEach(n => {
+    // subtle rotation via transform
+    ctx.save();
+    ctx.translate(n.x, n.y);
+    ctx.rotate(n.rot);
+    const g = ctx.createRadialGradient(0,0,n.radius*0.1, 0,0,n.radius);
+    const color = `hsl(${n.hue} 80% 55% / ${n.alpha})`;
+    g.addColorStop(0, color);
+    g.addColorStop(0.5, `hsl(${n.hue} 60% 40% / ${n.alpha*0.7})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0,0,n.radius,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // move
+    n.x += n.driftX;
+    n.y += n.driftY;
+    n.rot += n.rotSpeed;
+    // wrap
+    if (n.x < -n.radius) n.x = canvas.width + n.radius;
+    if (n.x > canvas.width + n.radius) n.x = -n.radius;
+    if (n.y < -n.radius) n.y = canvas.height + n.radius;
+    if (n.y > canvas.height + n.radius) n.y = -n.radius;
+  });
+}
+
+function drawPlanets() {
+  planets.forEach(p => {
+    p.x += p.speedX * (1 + p.parallax);
+    p.y += p.speedY * (1 + p.parallax);
+    p.rotation += p.rotSpeed;
+
+    // Draw planet body with a subtle ring
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rotation);
+    // body gradient
+    const g = ctx.createRadialGradient(-p.radius*0.3, -p.radius*0.3, p.radius*0.1, 0,0,p.radius);
+    g.addColorStop(0, `hsl(${p.hue} 70% 65% / 1)`);
+    g.addColorStop(0.6, `hsl(${p.hue} 60% 40% / 1)`);
+    g.addColorStop(1, `rgba(0,0,0,0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0,0,p.radius,0,Math.PI*2);
+    ctx.fill();
+
+    // ring (if big enough)
+    if (p.radius > 30) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.radius * 1.6, p.radius * 0.35, 0.5, 0, Math.PI*2);
+      ctx.strokeStyle = `hsla(${p.hue} 80% 60% / 0.18)`;
+      ctx.lineWidth = Math.max(2, p.radius * 0.06);
+      ctx.stroke();
+    }
+
+    // soft glow
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath();
+    ctx.fillStyle = `hsla(${p.hue} 80% 60% / ${p.glow})`;
+    ctx.arc(0,0,p.radius*1.25,0,Math.PI*2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.restore();
+
+    // wrap
+    if (p.x < -p.radius*2) p.x = canvas.width + p.radius*2;
+    if (p.x > canvas.width + p.radius*2) p.x = -p.radius*2;
+    if (p.y < -p.radius*2) p.y = canvas.height + p.radius*2;
+    if (p.y > canvas.height + p.radius*2) p.y = -p.radius*2;
+  });
+}
+
+function drawBlackHoles() {
+  blackHoles.forEach(bh => {
+    bh.spin += bh.spinSpeed;
+
+    // swirling gradient
+    const rad = bh.radius;
+    const x = bh.x, y = bh.y;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(bh.spin);
+    // draw event horizon
+    const g = ctx.createRadialGradient(0,0,0, 0,0,rad*1.8);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.5, `rgba(20,30,60,0.95)`);
+    g.addColorStop(0.85, `rgba(80,0,120,0.25)`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0,0,rad*1.2,0,Math.PI*2);
+    ctx.fill();
+
+    // inner glow ring
+    ctx.beginPath();
+    ctx.arc(0,0,rad*1.6,0,Math.PI*2);
+    ctx.strokeStyle = `rgba(255,255,255,${0.03 + bh.glare*0.06})`;
+    ctx.lineWidth = Math.max(2, rad*0.12);
+    ctx.stroke();
+
+    // small gravitational lensing arcs
+    for (let i=0;i<6;i++) {
+      ctx.beginPath();
+      const r = rad*1.6 + i*3;
+      ctx.arc(0,0,r, i*0.4 + 0.1*Math.sin(bh.spin*4+i), i*0.4 + 1.1 + 0.1*Math.cos(bh.spin*3+i));
+      ctx.strokeStyle = `rgba(200,200,255,${0.02 + 0.02*Math.sin(bh.spin*2+i)})`;
+      ctx.lineWidth = Math.max(0.4, 0.8 - i*0.08);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // subtle movement
+    bh.x += Math.sin(bh.spin*0.5)*0.2;
+    bh.y += Math.cos(bh.spin*0.4)*0.15;
+
+    if (bh.x < -rad*2) bh.x = canvas.width + rad*2;
+    if (bh.x > canvas.width + rad*2) bh.x = -rad*2;
+    if (bh.y < -rad*2) bh.y = canvas.height + rad*2;
+    if (bh.y > canvas.height + rad*2) bh.y = -rad*2;
+  });
+}
+
+function updateStars() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Draw nebulas first (furthest back)
+  drawNebulas();
+
+  // Draw planets behind stars but in front of nebulas
+  drawPlanets();
+
+  // Draw black holes (in front of planets sometimes)
+  drawBlackHoles();
+
+  // Draw stars
+  stars.forEach(s => {
+    s.x -= s.speed;
+    if (s.x < 0) s.x = canvas.width;
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255,255,255,${s.opacity})`;
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  requestAnimationFrame(updateStars);
+}
+window.addEventListener('resize', () => { resizeCanvas(); initStars(); initBackgroundObjects(); });
+resizeCanvas(); initStars(); initBackgroundObjects(); updateStars();
+
+/* --- Blender (both Free Blend and Recipe Crafting) --- */
+
+let blendSelectedIndices = []; // for free blend selections
+
+/* --- Recipes --- */
+/* result for potions will be special objects with effect: "potion", charges, luckMultiplier */
+const recipes = [
+  {
+    id: "astral_radiance",
+    name: "Astral Radiance Potion",
+    required: [
+      "🌟 Pulsar Fragment",
+      "🌌 Dark Matter Shard",
+      "🛸 Alien Crystal",
+      "🔮 Quantum Crystal",
+      "🌠 Comet Dust",
+      "🛰️ Quantum Circuit"
+    ],
+    // crafted potion has a number of charges and a luckMultiplier (per user's request)
+    result: { text: "🌟 Astral Radiance Potion (Crafted)", rarity: "legendary", value: 1000, effect: "potion", charges: 5, luckMultiplier: 3 }
+  },
+  {
+    id: "supernova_elixir",
+    name: "Supernova Elixir",
+    required: [
+      "🌠 Star Forge",
+      "🛸 Alien Core",
+      "🔮 Cosmic Crystal",
+      "🚀 Rocket Fuel",
+      "🧪 Super Serum",
+      "🌌 Nebula Ash"
+    ],
+    result: { text: "🌟 Supernova Elixir (Crafted)", rarity: "legendary", value: 2000, effect: "potion", charges: 8, luckMultiplier: 5 }
+  },
+  {
+    id: "cosmic_tonic",
+    name: "Cosmic Tonic",
+    required: [
+      "🌕 Moon Pebble",
+      "🧬 Alien DNA",
+      "🛰️ AI Core",
+      "⚛️ Antimatter Sample",
+      "🔮 Energy Sphere",
+      "🌈 Prism Core"
+    ],
+    result: { text: "🌈 Cosmic Tonic (Crafted)", rarity: "exotic", value: 5000, effect: "potion", charges: 12, luckMultiplier: 8 }
+  }
+];
+
+/* For recipe crafting we maintain pending selections per recipe id:
+   pendingCraft[recipeId] = array of { text, originalItem } in same order as recipe.required
+*/
+const pendingCraft = {};
+recipes.forEach(r => pendingCraft[r.id] = Array(r.required.length).fill(null));
+
+/* --- Helper: count items in inventory by text and return indices lists --- */
+function inventoryCountsAndIndices() {
+  const counts = {};
+  const indices = {}; // text -> array of indices (ascending)
+  for (let i = 0; i < inventory.length; i++) {
+    const t = inventory[i].text;
+    counts[t] = (counts[t] || 0) + 1;
+    if (!indices[t]) indices[t] = [];
+    indices[t].push(i);
+  }
+  return { counts, indices };
+}
+
+/* --- UI: render blender UI depending on selected mode --- */
+function renderBlenderInventory() {
+  const mode = document.querySelector('input[name="blendMode"]:checked')?.value || 'free';
+  const freeArea = document.getElementById('blenderFreeArea');
+  const recipeArea = document.getElementById('blenderRecipeArea');
+  if (mode === 'free') {
+    freeArea.classList.remove('hidden');
+    recipeArea.classList.add('hidden');
+    renderFreeBlendInventory();
+  } else {
+    freeArea.classList.add('hidden');
+    recipeArea.classList.remove('hidden');
+    renderRecipeList();
+  }
+}
+
+/* --- Free Blend (original behavior, choose exactly 3 items) --- */
+function renderFreeBlendInventory() {
+  const container = document.getElementById("blenderInventory");
+  container.innerHTML = "";
+  if (inventory.length === 0) {
+    container.textContent = "Inventory is empty.";
+    document.getElementById("blendBtn").disabled = true;
+    return;
+  }
+  inventory.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "blend-item";
+    const left = document.createElement("div");
+    left.textContent = `${item.text} (${item.rarity.toUpperCase()})`;
+    if (blendSelectedIndices.includes(idx)) div.classList.add("selected");
+    div.onclick = () => {
+      const pos = blendSelectedIndices.indexOf(idx);
+      if (pos === -1) {
+        if (blendSelectedIndices.length < 3) blendSelectedIndices.push(idx);
+        else { alert("You can only select exactly 3 items to blend."); return; }
+      } else {
+        blendSelectedIndices.splice(pos, 1);
+      }
+      renderFreeBlendInventory();
+      checkBlendButton();
+    };
+    div.appendChild(left);
+    container.appendChild(div);
+  });
+  checkBlendButton();
+}
+
+function checkBlendButton() {
+  const btn = document.getElementById("blendBtn");
+  btn.disabled = blendSelectedIndices.length !== 3;
+}
+
+function blendItems() {
+  const mode = document.querySelector('input[name="blendMode"]:checked')?.value || 'free';
+  if (mode !== 'free') return;
+  if (blendSelectedIndices.length !== 3) return;
+  document.getElementById("blendBtn").disabled = true;
+  const blendAnim = document.getElementById("blendAnimation");
+  blendAnim.textContent = "Blending...";
+  let dots = 0;
+  const animInterval = setInterval(() => { dots = (dots + 1) % 4; blendAnim.textContent = "Blending" + ".".repeat(dots); }, 400);
+
+  const selectedIndicesCopy = blendSelectedIndices.slice().sort((a,b)=>a-b); // ascending
+
+  setTimeout(() => {
+    clearInterval(animInterval);
+    blendAnim.textContent = "";
+
+    // remove selected indices from inventory (highest first)
+    selectedIndicesCopy.slice().reverse().forEach(i => {
+      if (inventory[i]) inventory.splice(i,1);
+    });
+
+    blendSelectedIndices = [];
+
+    // give new random item (respecting luck weights)
+    const result = getRandomOutcome();
+    inventory.push({ text: result.text, rarity: result.rarity, value: result.value, effect: result.effect || null, favorite: false });
+
+    if (!collectionSet.has(result.text)) collectionSet.add(result.text);
+
+    renderInventory();
+    renderCollection();
+    renderBlenderInventory();
+    alert(`Blending complete! You received: ${result.text} (${result.rarity.toUpperCase()})`);
+  }, 2500);
+}
+
+/* --- Recipe Crafting: display recipes and handle single-item adding --- */
+function renderRecipeList() {
+  const list = document.getElementById("recipesList");
+  list.innerHTML = "";
+
+  const { counts } = inventoryCountsAndIndices();
+
+  recipes.forEach(recipe => {
+    const div = document.createElement("div");
+    div.className = "recipe";
+
+    const reqs = document.createElement("div");
+    reqs.className = "reqs";
+
+    // header + clear button
+    const header = document.createElement("div");
+    header.innerHTML = `<strong>${recipe.name}</strong>`;
+
+    // slots display
+    const slotsContainer = document.createElement("div");
+    slotsContainer.style.marginTop = "6px";
+
+    recipe.required.forEach((reqText, i) => {
+      const slot = document.createElement("div");
+      slot.className = "req-slot";
+
+      // determine style: filled, available, or missing
+      if (pendingCraft[recipe.id][i]) {
+        slot.classList.add("req-filled");
+        slot.innerHTML = `<span>${reqText} — ADDED</span><button>Remove</button>`;
+        slot.querySelector("button").onclick = () => {
+          // return back to inventory the specific saved item
+          const saved = pendingCraft[recipe.id][i];
+          if (saved && saved.originalItem) {
+            inventory.push(saved.originalItem);
+          }
+          pendingCraft[recipe.id][i] = null;
+          renderRecipeList();
+          renderInventory();
+        };
+      } else {
+        // not filled: show availability
+        const have = counts[reqText] && counts[reqText] > 0;
+        slot.classList.add(have ? "req-available" : "req-missing");
+        const btn = document.createElement("button");
+        btn.textContent = have ? "Add" : "Missing";
+        btn.disabled = !have;
+        slot.innerHTML = `<span>${reqText}</span>`;
+        slot.appendChild(btn);
+        btn.onclick = () => {
+          // consume one instance of reqText from inventory and store original item data
+          const { indices } = inventoryCountsAndIndices();
+          if (!indices[reqText] || indices[reqText].length === 0) {
+            alert("No such item available (it may have been used already).");
+            renderRecipeList();
+            return;
+          }
+          const takeIndex = indices[reqText][0];
+          const originalItem = inventory.splice(takeIndex, 1)[0];
+          pendingCraft[recipe.id][i] = { text: reqText, originalItem };
+          renderRecipeList();
+          renderInventory();
+        };
+      }
+
+      slotsContainer.appendChild(slot);
+    });
+
+    const right = document.createElement("div");
+    const craftBtn = document.createElement("button");
+    craftBtn.textContent = "Craft";
+    // check if all slots filled
+    const allFilled = pendingCraft[recipe.id].every(s => s !== null);
+    craftBtn.disabled = !allFilled;
+    craftBtn.onclick = () => {
+      // assemble crafted item
+      const crafted = Object.assign({}, recipe.result);
+      if (crafted.effect === "potion") {
+        crafted.effect = "potion";
+        crafted.charges = crafted.charges || 1;
+        crafted.luckMultiplier = crafted.luckMultiplier || 1;
+      }
+      inventory.push(Object.assign({ favorite: false }, crafted));
+      if (!collectionSet.has(crafted.text)) collectionSet.add(crafted.text);
+
+      // clear pending and finish
+      pendingCraft[recipe.id] = Array(recipe.required.length).fill(null);
+      renderInventory();
+      renderCollection();
+      renderRecipeList();
+      alert(`Crafting complete! You received: ${crafted.text} (${crafted.rarity.toUpperCase()})`);
+    };
+
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear";
+    clearBtn.onclick = () => {
+      // return all pending items back to inventory
+      for (let i = 0; i < pendingCraft[recipe.id].length; i++) {
+        if (pendingCraft[recipe.id][i]) {
+          const saved = pendingCraft[recipe.id][i];
+          if (saved && saved.originalItem) inventory.push(saved.originalItem);
+          pendingCraft[recipe.id][i] = null;
+        }
+      }
+      renderRecipeList();
+      renderInventory();
+    };
+
+    right.appendChild(craftBtn);
+    right.appendChild(clearBtn);
+
+    reqs.appendChild(header);
+    reqs.appendChild(slotsContainer);
+
+    div.appendChild(reqs);
+    div.appendChild(right);
+    list.appendChild(div);
+  });
+
+  if (recipes.length === 0) {
+    list.textContent = "No recipes defined.";
+  }
+}
+
+/* --- Persistence: Save / Load game using localStorage --- */
+const SAVE_KEY = "space_rng_clicker_save_v1";
+const SETTINGS_KEY = "space_rng_clicker_settings_v1";
+
+function saveGame(userTriggered = false) {
+  try {
+    const payload = {
+      wallet,
+      baseLuckMultiplier,
+      inventory,
+      collection: Array.from(collectionSet),
+      shopPurchased: Array.from(shopPurchasedSet),
+      activePotion,
+      // pendingCraft: store text arrays to be safe (we won't persist originalItem objects)
+      pendingCraft: Object.fromEntries(Object.entries(pendingCraft).map(([k,arr]) => [k, arr.map(v => v ? v.text : null)]))
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+    if (userTriggered) alert("Game saved.");
+    // also save settings
+    saveSettings(false);
+  } catch (e) {
+    console.error("Save failed", e);
+    alert("Failed to save game (see console).");
+  }
+}
+
+function loadGame(userTriggered = false) {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      if (userTriggered) alert("No saved game found.");
+      return;
+    }
+    const payload = JSON.parse(raw);
+    wallet = payload.wallet || 0;
+    baseLuckMultiplier = payload.baseLuckMultiplier || 1;
+    inventory = payload.inventory || [];
+    collectionSet = new Set(payload.collection || []);
+    shopPurchasedSet.clear();
+    (payload.shopPurchased || []).forEach(n => shopPurchasedSet.add(n));
+    activePotion = payload.activePotion || null;
+    // pendingCraft: we have stored texts; we won't try to re-link originalItem objects, so keep slots empty
+    for (const key of Object.keys(pendingCraft)) {
+      pendingCraft[key] = Array(pendingCraft[key].length).fill(null);
+    }
+
+    // refresh UI state after load
+    luckMultiplier = baseLuckMultiplier * (activePotion ? activePotion.luckMultiplier : 1);
+    updateWallet();
+    updateLuckDisplay();
+    updateActivePotionInfo();
+    renderInventory();
+    renderShop();
+    renderCollection();
+    renderBlenderInventory();
+    if (userTriggered) alert("Game loaded.");
+  } catch (e) {
+    console.error("Load failed", e);
+    alert("Failed to load game (see console).");
+  }
+}
+
+function confirmReset() {
+  if (!confirm("Reset will clear saved data and restart the game. Continue?")) return;
+  localStorage.removeItem(SAVE_KEY);
+  localStorage.removeItem(SETTINGS_KEY);
+  location.reload();
+}
+
+/* Auto-save every 8 seconds (non-intrusive) and when leaving */
+let autosaveTimer = setInterval(() => { saveGame(false); }, 8000);
+window.addEventListener("beforeunload", () => { saveGame(false); });
+
+/* --- Settings: music & volume --- */
+const audio = document.getElementById("bgAudio");
+const musicSelect = document.getElementById("musicSelect");
+const playPauseBtn = document.getElementById("playPauseMusic");
+const volumeRange = document.getElementById("volumeRange");
+const volumeLabel = document.getElementById("volumeLabel");
+
+let settings = {
+  track: musicSelect.value || 'song1.mp3',
+  volume: 1.0,
+  playing: false
+};
+
+function applySettingsToAudio() {
+  audio.src = settings.track;
+  audio.volume = settings.volume;
+  audio.loop = true;
+  volumeRange.value = settings.volume;
+  volumeLabel.textContent = `${Math.round(settings.volume*100)}%`;
+  musicSelect.value = settings.track;
+  updatePlayPauseLabel();
+}
+
+function saveSettings(userTriggered = false) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (userTriggered) {
+      // keep minimal UX
+      alert("Settings saved.");
+    }
+  } catch (e) {
+    console.error("Failed saving settings", e);
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    settings = Object.assign(settings, JSON.parse(raw));
+  } catch (e) {
+    console.error("Failed loading settings", e);
+  }
+}
+
+function tryPlayMusic() {
+  // Attempt to start audio; browsers might block autoplay until user gestures.
+  audio.play().then(() => {
+    settings.playing = true;
+    updatePlayPauseLabel();
+    saveSettings(false);
+  }).catch(() => {
+    settings.playing = false;
+    updatePlayPauseLabel();
+  });
+}
+
+function updatePlayPauseLabel() {
+  playPauseBtn.textContent = settings.playing ? "Pause" : "Play";
+  // set aria/tooltip optionally
+}
+
+playPauseBtn.addEventListener('click', () => {
+  if (settings.playing) {
+    audio.pause();
+    settings.playing = false;
+  } else {
+    // ensure current src
+    audio.src = settings.track;
+    audio.volume = settings.volume;
+    audio.play().catch(() => {
+      // ignore
+    });
+    settings.playing = true;
+  }
+  updatePlayPauseLabel();
+  saveSettings(true);
+});
+
+musicSelect.addEventListener('change', () => {
+  settings.track = musicSelect.value;
+  audio.src = settings.track;
+  if (settings.playing) {
+    audio.play().catch(()=>{});
+  }
+  saveSettings(true);
+});
+
+volumeRange.addEventListener('input', () => {
+  const v = parseFloat(volumeRange.value);
+  settings.volume = v;
+  audio.volume = v;
+  volumeLabel.textContent = `${Math.round(v*100)}%`;
+  saveSettings(false);
+});
+
+/* try to play audio when user first interacts (this page likely requires user gesture to play) */
+['click','keydown','mousemove','touchstart'].forEach(evt => {
+  window.addEventListener(evt, function oncePlay() {
+    // try only once if audio isn't playing
+    if (!settings.playing) {
+      tryPlayMusic();
+    }
+    window.removeEventListener(evt, oncePlay);
+  });
+});
+
+/* initial load of settings */
+loadSettings();
+applySettingsToAudio();
+
+/* --- Init UI at load --- */
+updateWallet();
+luckMultiplier = baseLuckMultiplier;
+updateLuckDisplay();
+renderInventory();
+renderShop();
+renderCollection();
+renderBlenderInventory();
+updateActivePotionInfo();
+
+/* On first load try loading saved game automatically (but do not overwrite if user wants fresh) */
+(function tryAutoLoad() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) {
+    // load silently
+    loadGame(false);
+  }
+})();
+
+</script>
+</body>
+</html>
